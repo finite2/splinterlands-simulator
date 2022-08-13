@@ -1,3 +1,4 @@
+/* eslint no-console: ["error", { allow: ["warn", "error"] }] */
 import { GameTeam } from './game_team';
 import * as rulesetUtils from './utils/ruleset_utils';
 import {
@@ -38,7 +39,7 @@ export class Game {
   private winner: number | undefined;
   private deadMonsters: GameMonster[] = [];
   private roundNumber = 0;
-  private stunnedMonsters: Map<GameMonster, GameMonster[]> = new Map();
+  private stunnedMonsters: Map<GameMonster, StunDetails[]> = new Map();
 
   constructor(
     team1: GameTeam,
@@ -235,7 +236,6 @@ export class Game {
   }
 
   private doMonsterPreTurn(monster: GameMonster) {
-    monster.setHasTurnPassed(true);
     const friendlyTeam = this.getTeamOfMonster(monster);
 
     if (monster.hasAbility(Ability.CLEANSE)) {
@@ -418,8 +418,13 @@ export class Game {
     // TODO: This doesn't account for the pierce.
     this.maybeLifeLeech(attackingMonster, battleDamage.actualDamageDone);
     this.maybeApplyThorns(attackingMonster, attackTarget, attackType);
-    this.maybeApplyMagicReflect(attackingMonster, attackTarget, attackType);
-    this.maybeApplyReturnFire(attackingMonster, attackTarget, attackType);
+    this.maybeApplyMagicReflect(
+      attackingMonster,
+      attackTarget,
+      attackType,
+      battleDamage.damageDone,
+    );
+    this.maybeApplyReturnFire(attackingMonster, attackTarget, attackType, battleDamage.damageDone);
     this.maybeRetaliate(attackingMonster, attackTarget, attackType);
     this.maybeApplyHalving(attackingMonster, attackTarget);
 
@@ -447,7 +452,7 @@ export class Game {
     if (
       attackingMonster.hasAbility(Ability.AFFLICTION) &&
       !attackTarget.hasDebuff(Ability.AFFLICTION) &&
-      gameUtils.getSuccessBelow(abilityUtils.AFFLICTION_CHANCE * 100)
+      abilityUtils.getSuccessBelow(abilityUtils.AFFLICTION_CHANCE * 100)
     ) {
       this.createAndAddBattleLog(
         Ability.AFFLICTION,
@@ -671,9 +676,19 @@ export class Game {
   }
 
   private removeStunsThatThisMonsterApplied(monster: GameMonster) {
-    if (this.stunnedMonsters.has(monster)) {
-      const hadStunMonsters = this.stunnedMonsters.get(monster)!;
-      hadStunMonsters.forEach((stunnedMonster) => stunnedMonster.removeAllDebuff(Ability.STUN));
+    if (!this.stunnedMonsters.has(monster)) {
+      return;
+    }
+    const hadStunMonsters = this.stunnedMonsters.get(monster)!;
+    let keepMonsterInMap = false;
+    hadStunMonsters.forEach((stunnedDetail) => {
+      if (stunnedDetail.hasStunTurnPassed) {
+        stunnedDetail.monster.removeAllDebuff(Ability.STUN);
+      } else {
+        keepMonsterInMap = true;
+      }
+    });
+    if (!keepMonsterInMap) {
       this.stunnedMonsters.delete(monster);
     }
   }
@@ -682,10 +697,8 @@ export class Game {
     if (monster.isAlive() || this.deadMonsters.indexOf(monster) > -1) {
       return;
     }
-    this.removeStunsThatThisMonsterApplied(monster);
     this.createAndAddBattleLog(AdditionalBattleAction.DEATH, monster);
     this.deadMonsters.push(monster);
-    monster.setHasTurnPassed(true);
     // Monster just died!
     const friendlyTeam = this.getTeamOfMonster(monster);
     const aliveFriendlyTeam = friendlyTeam.getAliveMonsters();
@@ -798,7 +811,7 @@ export class Game {
     if (!attackTarget.hasAbility(Ability.MAGIC_REFLECT) || attackType !== AttackType.MAGIC) {
       return;
     }
-    attackDamage = attackDamage === 0 ? 1 : attackDamage;
+    attackDamage = attackDamage || 1;
     let reflectDamage =
       attackDamage !== undefined
         ? Math.ceil(attackDamage / 2)
@@ -827,7 +840,7 @@ export class Game {
     if (!attackTarget.hasAbility(Ability.RETURN_FIRE) || attackType !== AttackType.RANGED) {
       return;
     }
-    attackDamage = attackDamage === 0 ? 1 : attackDamage;
+    attackDamage = attackDamage || 1;
     let reflectDamage =
       attackDamage !== undefined
         ? Math.ceil(attackDamage / 2)
@@ -855,7 +868,7 @@ export class Game {
     if (
       !attackTarget.hasAbility(Ability.RETALIATE) ||
       attackType !== AttackType.MELEE ||
-      gameUtils.getSuccessBelow(abilityUtils.RETALIATE_CHANCE * 100)
+      !abilityUtils.getSuccessBelow(abilityUtils.RETALIATE_CHANCE * 100)
     ) {
       return;
     }
@@ -865,11 +878,12 @@ export class Game {
 
   private maybeApplyStun(attackingMonster: GameMonster, attackTarget: GameMonster) {
     if (
+      !attackTarget.hasDebuff(Ability.STUN) &&
       attackingMonster.hasAbility(Ability.STUN) &&
-      gameUtils.getSuccessBelow(abilityUtils.STUN_CHANCE * 100)
+      abilityUtils.getSuccessBelow(abilityUtils.STUN_CHANCE * 100)
     ) {
       const prevStunnedMonsters = this.stunnedMonsters.get(attackingMonster) || [];
-      prevStunnedMonsters.push(attackTarget);
+      prevStunnedMonsters.push({ monster: attackTarget, hasStunTurnPassed: false });
       this.stunnedMonsters.set(attackingMonster, prevStunnedMonsters);
       this.addMonsterToMonsterDebuff(attackingMonster, attackTarget, Ability.STUN);
     }
@@ -878,7 +892,7 @@ export class Game {
   private maybeApplyPoison(attackingMonster: GameMonster, attackTarget: GameMonster) {
     if (
       attackingMonster.hasAbility(Ability.POISON) &&
-      gameUtils.getSuccessBelow(abilityUtils.POISON_CHANCE * 100) &&
+      abilityUtils.getSuccessBelow(abilityUtils.POISON_CHANCE * 100) &&
       !attackTarget.hasDebuff(Ability.POISON) &&
       attackTarget.isAlive()
     ) {
@@ -901,7 +915,7 @@ export class Game {
   }
 
   private maybeApplyBloodlust(attackingMonster: GameMonster, isReverseSpeed: boolean) {
-    if (!attackingMonster.hasAbility(Ability.BLOODLUST) || attackingMonster.health < 1) {
+    if (!attackingMonster.hasAbility(Ability.BLOODLUST) || !attackingMonster.isAlive()) {
       return;
     }
     // Add attack if have attack
@@ -918,7 +932,7 @@ export class Game {
       attackingMonster.armor += 1;
     }
     const speedChange = isReverseSpeed ? -1 : 1;
-    attackingMonster.speed += speedChange;
+    attackingMonster.speed = Math.max(attackingMonster.speed + speedChange, 1);
     attackingMonster.health += 1;
     this.createAndAddBattleLog(Ability.BLOODLUST, attackingMonster);
   }
@@ -1001,12 +1015,15 @@ export class Game {
 
     let currentMonster = this.getNextMonsterTurn();
     while (currentMonster !== null) {
+      currentMonster.setHasTurnPassed(true);
+      this.removeStunsThatThisMonsterApplied(currentMonster);
       if (!currentMonster.isAlive()) {
+        currentMonster = this.getNextMonsterTurn();
         continue;
       }
-      this.removeStunsThatThisMonsterApplied(currentMonster);
       if (currentMonster.hasDebuff(Ability.STUN)) {
         currentMonster.setHasTurnPassed(true);
+        this.markStunnedMonsterTurnPassed(currentMonster);
         currentMonster = this.getNextMonsterTurn();
         continue;
       }
@@ -1037,6 +1054,9 @@ export class Game {
 
     this.monstersOnPostRound(aliveTeam1);
     this.monstersOnPostRound(aliveTeam2);
+    this.stunnedMonsters.forEach((unused, monster) => {
+      monster.setHasTurnPassed(false);
+    });
   }
 
   private doPostRoundEarthquake(aliveMonsters: GameMonster[]) {
@@ -1109,7 +1129,6 @@ export class Game {
     }
   }
 
-  // TODO: this hits all of team 1 then 2, but team order should random
   private fatigueMonsters(roundNumber: number) {
     const fatigueDamage = roundNumber - FATIGUE_ROUND_NUMBER + 1;
     const allAliveMonsters = this.team1.getAliveMonsters().concat(this.team2.getAliveMonsters());
@@ -1132,6 +1151,26 @@ export class Game {
     return monster.getTeamNumber() === 1 ? this.team2 : this.team1;
   }
 
+  private markStunnedMonsterTurnPassed(monster: GameMonster) {
+    const keys = this.stunnedMonsters.keys();
+    let key = keys.next();
+    while (key.value !== undefined) {
+      const stunnedMonsters = this.stunnedMonsters.get(key.value) || [];
+      const stunDetail = stunnedMonsters.find((detail) => detail.monster === monster);
+      if (stunDetail) {
+        stunDetail.hasStunTurnPassed = true;
+        return;
+      }
+      key = keys.next();
+    }
+
+    console.error(
+      `Could not find stunned monster ${monster.getName()} in stunned monster map ${
+        this.stunnedMonsters
+      }`,
+    );
+  }
+
   createAndAddBattleLog(
     action: BattleLogAction,
     cardOne?: GameCard,
@@ -1151,4 +1190,9 @@ export class Game {
     };
     this.battleLogs.push(log);
   }
+}
+
+interface StunDetails {
+  monster: GameMonster;
+  hasStunTurnPassed: boolean;
 }
