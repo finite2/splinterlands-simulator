@@ -1,6 +1,5 @@
 import { CardDetail, CardStats, TeamNumber } from './types';
 import { Ability } from './types';
-import { getCardDetailFromId } from './utils/card_utils';
 
 const RARITY_MAX_LEVEL = [0, 10, 8, 6, 4];
 
@@ -22,12 +21,8 @@ export class GameCard {
   ranged = 0;
   mana = 0;
 
-  constructor(cardDetail: CardDetail | number, cardLevel: number) {
-    if (typeof cardDetail === 'number') {
-      this.cardDetail = getCardDetailFromId(cardDetail);
-    } else {
-      this.cardDetail = cardDetail;
-    }
+  constructor(cardDetail: CardDetail, cardLevel: number) {
+    this.cardDetail = cardDetail;
 
     if (cardLevel === -1) {
       this.cardLevel = RARITY_MAX_LEVEL[this.cardDetail.rarity] - 1;

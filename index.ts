@@ -4,4 +4,3 @@ export { GameTeam } from './src/game_team';
 export { Game } from './src/game';
 export { GameCard } from './src/game_card';
 export * from './src/types';
-export { getCardDetailFromId } from './src/utils/card_utils';

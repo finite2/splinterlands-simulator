@@ -16,7 +16,7 @@ export class GameMonster extends GameCard {
   private summonerMagic = 0;
   private hadDivineShield = false;
 
-  constructor(cardDetail: CardDetail | number, cardLevel: number) {
+  constructor(cardDetail: CardDetail, cardLevel: number) {
     super(cardDetail, cardLevel);
   }
 

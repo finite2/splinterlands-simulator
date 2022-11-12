@@ -54,7 +54,7 @@ export async function exampleHistoricBattle() {
 }
 
 // In case the cards.json is not updated you can get all cards from the Splinterlands API
-async function getAllCards(): Promise<CardDetail[]> {
+export async function getAllCards(): Promise<CardDetail[]> {
   return await fetch(SPLINTERLANDS_API_URL + GET_ALL_CARDS_ENDPOINT).then(
     (response) => response.json() as Promise<CardDetail[]>,
   );
