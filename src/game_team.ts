@@ -147,7 +147,7 @@ export class GameTeam {
   /** Which monster to repair, returns NULL if none. Repair target is the one that lost the most armor. */
   public getRepairTarget(): GameMonster | null {
     let largestArmorDiff = 0;
-    let monsterToRepair = null;
+    let monsterToRepair = null as GameMonster | null;
     for (const currentMonster of this.getAliveMonsters()) {
       const armorDiff = currentMonster.getPostAbilityMaxArmor() - currentMonster.armor;
       if (armorDiff > largestArmorDiff) {
@@ -161,7 +161,7 @@ export class GameTeam {
   /** Which backline monster to triage, returns NULL if none */
   public getTriageHealTarget(): GameMonster | null {
     let largestHealthDiff = 0;
-    let monsterToTriage = null;
+    let monsterToTriage = null as GameMonster | null;
     const aliveMonsters = this.getAliveMonsters();
 
     for (let i = 1; i < aliveMonsters.length; i++) {

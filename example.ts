@@ -89,4 +89,3 @@ async function getHistoricBattle(battleId: string): Promise<BattleHistory> {
     (response) => response.json() as Promise<BattleHistory>,
   );
 }
-
